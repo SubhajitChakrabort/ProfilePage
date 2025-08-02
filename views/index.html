@@ -5,6 +5,24 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>My Fun Portfolio!</title>
+  
+  <!-- PWA Meta Tags -->
+  <meta name="theme-color" content="#4fc3f7" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="ProfilePage" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="msapplication-TileColor" content="#4fc3f7" />
+  <meta name="msapplication-tap-highlight" content="no" />
+  
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="/manifest.json" />
+  
+  <!-- Apple Touch Icons -->
+  <link rel="apple-touch-icon" href="/icon-192.png" />
+  <link rel="apple-touch-icon" sizes="152x152" href="/icon-192.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/icon-192.png" />
+  <link rel="apple-touch-icon" sizes="167x167" href="/icon-192.png" />
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" />
   <script>
@@ -2012,6 +2030,53 @@
     let slideshowInterval = null;
     const AUTH_TOKEN = 'Bearer your-token-here'; // Replace with actual token
 
+    // PWA Service Worker Registration
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then((registration) => {
+            console.log('SW registered: ', registration);
+          })
+          .catch((registrationError) => {
+            console.log('SW registration failed: ', registrationError);
+          });
+      });
+    }
+
+    // Enhanced file input handling for PWA
+    function enhanceFileInput(inputElement) {
+      // Add touch-friendly styling
+      inputElement.style.opacity = '0';
+      inputElement.style.position = 'absolute';
+      inputElement.style.pointerEvents = 'none';
+      
+      // Create a custom button wrapper
+      const wrapper = inputElement.parentElement;
+      if (wrapper && !wrapper.querySelector('.custom-file-button')) {
+        const customButton = document.createElement('button');
+        customButton.type = 'button';
+        customButton.className = 'custom-file-button';
+        customButton.innerHTML = '<i class="fa-solid fa-camera"></i> Choose File';
+        customButton.style.cssText = `
+          background: #4fc3f7;
+          color: white;
+          border: none;
+          padding: 10px 20px;
+          border-radius: 8px;
+          cursor: pointer;
+          font-size: 16px;
+          margin: 10px 0;
+        `;
+        
+        wrapper.insertBefore(customButton, inputElement);
+        
+        customButton.addEventListener('click', (e) => {
+          e.preventDefault();
+          inputElement.click();
+        });
+      }
+    }
+
     // Toast Notification System
     const toast = {
       show(message, type = 'info', duration = 5000) {
@@ -2975,10 +3040,19 @@
     // Open upload memory modal
     function openUploadMemoryModal() {
       selectedMemoryFiles = [];
-      document.getElementById('memoryFileInput').value = '';
+      const memoryFileInput = document.getElementById('memoryFileInput');
+      memoryFileInput.value = '';
       document.getElementById('memoryCaption').value = '';
       document.getElementById('memoryUploadPreview').innerHTML = '';
       document.getElementById('uploadMemoryModal').classList.add('show');
+      
+      // Force file input to be accessible on mobile
+      setTimeout(() => {
+        memoryFileInput.style.display = 'block';
+        memoryFileInput.style.opacity = '1';
+        memoryFileInput.style.position = 'relative';
+        memoryFileInput.style.pointerEvents = 'auto';
+      }, 100);
     }
 
     // Open add section modal
@@ -3192,9 +3266,17 @@
 
     // Handle memory file selection
     function handleMemoryFiles(files) {
+      console.log('handleMemoryFiles called with:', files);
       const preview = document.getElementById('memoryUploadPreview');
 
+      if (!files || files.length === 0) {
+        console.log('No files selected');
+        return;
+      }
+
       Array.from(files).forEach((file, index) => {
+        console.log('Processing file:', file.name, 'Type:', file.type, 'Size:', file.size);
+        
         // Check file size (10MB limit)
         const maxSize = 10 * 1024 * 1024; // 10MB
         if (file.size > maxSize) {
@@ -3205,9 +3287,11 @@
         // Check file type
         if (file.type.startsWith('image/') || file.type.startsWith('video/')) {
           selectedMemoryFiles.push(file);
+          console.log('File added to selectedMemoryFiles:', file.name);
 
           const reader = new FileReader();
           reader.onload = (e) => {
+            console.log('FileReader completed for:', file.name);
             const previewItem = document.createElement('div');
             previewItem.className = 'preview-item';
             previewItem.innerHTML = `
@@ -3226,7 +3310,14 @@
               `;
             preview.appendChild(previewItem);
           };
+          reader.onerror = (e) => {
+            console.error('FileReader error for:', file.name, e);
+            toast.error(`Error reading file: ${file.name}`);
+          };
           reader.readAsDataURL(file);
+        } else {
+          console.log('Invalid file type:', file.type);
+          toast.error(`Invalid file type: ${file.name}. Only images and videos are allowed.`);
         }
       });
     }
@@ -3244,13 +3335,29 @@
       });
     }
 
-    // Memory upload area events
-    document.getElementById('memoryUploadArea').addEventListener('click', () => {
-      document.getElementById('memoryFileInput').click();
+    // Memory upload area events with enhanced PWA support
+    const memoryFileInput = document.getElementById('memoryFileInput');
+    const memoryUploadArea = document.getElementById('memoryUploadArea');
+    
+    // Enhance file input for PWA
+    enhanceFileInput(memoryFileInput);
+    
+    memoryUploadArea.addEventListener('click', (e) => {
+      // Prevent double triggering
+      if (e.target.closest('.custom-file-button')) return;
+      memoryFileInput.click();
     });
 
-    document.getElementById('memoryFileInput').addEventListener('change', (e) => {
+    memoryFileInput.addEventListener('change', (e) => {
+      console.log('File input change event triggered');
+      console.log('Files selected:', e.target.files);
       handleMemoryFiles(e.target.files);
+    });
+
+    // Additional touch event handling for mobile
+    memoryUploadArea.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      memoryFileInput.click();
     });
 
     // Drag and drop for memory upload

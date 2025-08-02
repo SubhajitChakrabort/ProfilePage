@@ -20,6 +20,15 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
 app.use('/uploads', express.static('uploads'));
 
+// Serve PWA manifest and service worker
+app.get('/manifest.json', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'manifest.json'));
+});
+
+app.get('/sw.js', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'sw.js'));
+});
+
 // Set views directory
 app.set('views', path.join(__dirname, 'views'));
 
