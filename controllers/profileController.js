@@ -126,19 +126,7 @@ const getProfileById = async (req, res) => {
       const [itemRows] = await pool.execute(
         'SELECT * FROM section_items WHERE section_id = ? ORDER BY id',
         [section.id]
-      );
-      
-      // For skills, get additional images
-      for (const item of itemRows) {
-        if (section.name.toLowerCase().includes('skill')) {
-          const [imageRows] = await pool.execute(
-            'SELECT * FROM skill_images WHERE skill_id = ? ORDER BY display_order ASC',
-            [item.id]
-          );
-          item.images = imageRows;
-        }
-      }
-      
+    );
       section.items = itemRows;
     }
 

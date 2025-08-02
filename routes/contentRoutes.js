@@ -18,11 +18,7 @@ const {
   deleteAchievement,
   addAdventure,
   updateAdventure,
-  deleteAdventure,
-  addSkillImage,
-  getSkillImages,
-  updateSkillImageOrder,
-  deleteSkillImage
+  deleteAdventure
 } = require('../controllers/contentController');
 const { upload, handleUploadError } = require('../middleware/upload');
 
@@ -40,12 +36,6 @@ router.delete('/projects/:id', deleteProject);
 router.post('/skills', upload.single('file'), handleUploadError, addSkill);
 router.put('/skills/:id', upload.single('file'), handleUploadError, updateSkill);
 router.delete('/skills/:id', deleteSkill);
-
-// Skill image routes
-router.post('/skills/:skillId/images', upload.single('file'), handleUploadError, addSkillImage);
-router.get('/skills/:skillId/images', getSkillImages);
-router.put('/skills/:skillId/images/order', updateSkillImageOrder);
-router.delete('/skills/images/:imageId', deleteSkillImage);
 
 // Certificate routes (no auth required - uses profile ID)
 router.post('/certificates', upload.single('file'), handleUploadError, addCertificate);
