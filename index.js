@@ -3,7 +3,7 @@ const cors = require('cors');
 const path = require('path');
 require('dotenv').config();
 
-const { testConnection } = require('./config/db');
+const { testConnection, initializeDatabase } = require('./config/db');
 const profileRoutes = require('./routes/profileRoutes');
 const contentRoutes = require('./routes/contentRoutes');
 const memoryRoutes = require('./routes/memoryRoutes');
@@ -23,8 +23,8 @@ app.use('/uploads', express.static('uploads'));
 // Set views directory
 app.set('views', path.join(__dirname, 'views'));
 
-// Test database connection
-testConnection();
+// Initialize database
+initializeDatabase();
 
 // Routes
 app.use('/api/profile', profileRoutes);
