@@ -45,12 +45,17 @@ app.get('/uploads/:filename', (req, res) => {
   const uploadsDir = path.join(__dirname, 'uploads');
   if (!fs.existsSync(uploadsDir)) {
     console.log(`❌ Uploads directory does not exist: ${uploadsDir}`);
-    return res.status(404).json({ error: 'Uploads directory not found' });
+    return res.status(404).json({ 
+      error: 'Uploads directory not found',
+      message: 'The uploads directory does not exist on this server',
+      requestedFile: filename
+    });
   }
   
   // List some files in uploads directory for debugging
+  let files = [];
   try {
-    const files = fs.readdirSync(uploadsDir);
+    files = fs.readdirSync(uploadsDir);
     console.log(`📁 Uploads directory contains ${files.length} files`);
     if (files.length > 0) {
       console.log(`📁 Sample files: ${files.slice(0, 3).join(', ')}`);
@@ -70,7 +75,6 @@ app.get('/uploads/:filename', (req, res) => {
     
     // Try to find similar files
     try {
-      const files = fs.readdirSync(uploadsDir);
       const similarFiles = files.filter(file => 
         file.includes(filename.split('.')[0]) || 
         filename.includes(file.split('.')[0])
@@ -78,11 +82,40 @@ app.get('/uploads/:filename', (req, res) => {
       if (similarFiles.length > 0) {
         console.log(`🔍 Similar files found: ${similarFiles.join(', ')}`);
       }
+      
+      // Check for files with similar patterns
+      const filePattern = filename.split('-')[0]; // e.g., "profilePicture", "coverImage", "files"
+      const patternFiles = files.filter(file => file.startsWith(filePattern));
+      if (patternFiles.length > 0) {
+        console.log(`🔍 Files with same pattern (${filePattern}): ${patternFiles.slice(0, 5).join(', ')}`);
+      }
+      
+      // Try to serve a fallback file of the same type
+      const fileExtension = path.extname(filename).toLowerCase();
+      const fallbackFiles = files.filter(file => 
+        file.endsWith(fileExtension) && 
+        (file.includes('profilePicture') || file.includes('coverImage') || file.includes('files'))
+      );
+      
+      if (fallbackFiles.length > 0) {
+        const fallbackFile = fallbackFiles[0];
+        const fallbackPath = path.join(uploadsDir, fallbackFile);
+        console.log(`🔄 Serving fallback file: ${fallbackFile}`);
+        return res.sendFile(fallbackPath);
+      }
+      
     } catch (error) {
       console.log(`❌ Error searching for similar files: ${error.message}`);
     }
     
-    res.status(404).json({ error: 'File not found' });
+    res.status(404).json({ 
+      error: 'File not found',
+      message: 'The requested file does not exist on this server',
+      requestedFile: filename,
+      availableFiles: files.length,
+      serverTime: new Date().toISOString(),
+      suggestion: 'Consider running the sync script to download missing files from production'
+    });
   }
 });
 
