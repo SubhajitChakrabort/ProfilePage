@@ -51,18 +51,38 @@ exports.addSectionItem = async (req, res) => {
   try {
     const { sectionId, title, icon, description } = req.body;
     let file_path = null, file_type = null;
-    if (req.file) {
+    
+    if (req.files && req.files.length > 0) {
+      // Handle multiple files
+      const files = req.files.map(file => ({
+        path: file.filename,
+        type: file.mimetype.startsWith('image/') ? 'image'
+             : file.mimetype.startsWith('video/') ? 'video'
+             : 'file'
+      }));
+      file_path = JSON.stringify(files);
+      file_type = 'multiple';
+    } else if (req.file) {
+      // Handle single file (backward compatibility)
       file_path = req.file.filename;
       file_type = req.file.mimetype.startsWith('image/') ? 'image'
                 : req.file.mimetype.startsWith('video/') ? 'video'
                 : 'file';
     }
+    
+    // First, let's check if the section exists
+    const [sectionCheck] = await pool.execute('SELECT id FROM sections WHERE id = ?', [sectionId]);
+    if (sectionCheck.length === 0) {
+      return res.status(400).json({ error: 'Section not found' });
+    }
+    
     const [result] = await pool.execute(
       'INSERT INTO section_items (section_id, title, icon, file_path, file_type, description) VALUES (?, ?, ?, ?, ?, ?)',
       [sectionId, title, icon, file_path, file_type, description]
     );
     res.json({ id: result.insertId, title, icon, file_path, file_type, description });
   } catch (err) {
+    console.error('Error in addSectionItem:', err);
     res.status(500).json({ error: 'Failed to add item' });
   }
 };
@@ -96,11 +116,28 @@ exports.deleteSection = async (req, res) => {
 exports.deleteSectionItem = async (req, res) => {
   try {
     const { itemId } = req.params;
-    // Optionally: delete file from disk
-    const [rows] = await pool.execute('SELECT file_path FROM section_items WHERE id = ?', [itemId]);
+    // Delete files from disk
+    const [rows] = await pool.execute('SELECT file_path, file_type FROM section_items WHERE id = ?', [itemId]);
     if (rows.length && rows[0].file_path) {
-      const filePath = path.join('./uploads', rows[0].file_path);
-      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      try {
+        // Try to parse as JSON (multiple files)
+        const files = JSON.parse(rows[0].file_path);
+        if (Array.isArray(files)) {
+          // Delete multiple files
+          files.forEach(file => {
+            const filePath = path.join('./uploads', file.path);
+            if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+          });
+        } else {
+          // Single file (backward compatibility)
+          const filePath = path.join('./uploads', rows[0].file_path);
+          if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        }
+      } catch (e) {
+        // Single file (backward compatibility)
+        const filePath = path.join('./uploads', rows[0].file_path);
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      }
     }
     await pool.execute('DELETE FROM section_items WHERE id = ?', [itemId]);
     res.json({ message: 'Item deleted' });
@@ -130,14 +167,38 @@ exports.updateSection = async (req, res) => {
 exports.updateSectionItem = async (req, res) => {
   try {
     const { itemId } = req.params;
-    const { title, icon, description } = req.body;
+    const { title, icon, description, existingFiles: existingFilesData } = req.body;
     let file_path = null, file_type = null;
     
-    if (req.file) {
-      file_path = req.file.filename;
-      file_type = req.file.mimetype.startsWith('image/') ? 'image'
-                : req.file.mimetype.startsWith('video/') ? 'video'
-                : 'file';
+    // Parse existing files from request body (files that should be kept)
+    let existingFiles = [];
+    if (existingFilesData) {
+      try {
+        existingFiles = JSON.parse(existingFilesData);
+      } catch (e) {
+        console.error('Error parsing existing files data:', e);
+      }
+    }
+    
+    if (req.files && req.files.length > 0) {
+      // Handle new uploaded files
+      const newFiles = req.files.map(file => ({
+        path: file.filename,
+        type: file.mimetype.startsWith('image/') ? 'image'
+             : file.mimetype.startsWith('video/') ? 'video'
+             : 'file'
+      }));
+      
+      // Combine existing files (that weren't removed) with new files
+      const allFiles = [...existingFiles, ...newFiles];
+      file_path = JSON.stringify(allFiles);
+      file_type = 'multiple';
+    } else {
+      // No new files uploaded, use only the existing files that weren't removed
+      if (existingFiles.length > 0) {
+        file_path = JSON.stringify(existingFiles);
+        file_type = 'multiple';
+      }
     }
     
     if (file_path) {

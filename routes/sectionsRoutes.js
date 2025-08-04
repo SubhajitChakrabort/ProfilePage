@@ -10,9 +10,9 @@ router.put('/section/:sectionId', updateSection);
 router.delete('/section/:sectionId', deleteSection);
 
 // Section Items CRUD
-router.post('/section/item', upload.single('file'), handleUploadError, addSectionItem);
+router.post('/section/item', upload.array('files', 10), handleUploadError, addSectionItem);
 router.get('/section/items', getSectionItems);
-router.put('/section/item/:itemId', upload.single('file'), handleUploadError, updateSectionItem);
+router.put('/section/item/:itemId', upload.array('files', 10), handleUploadError, updateSectionItem);
 router.delete('/section/item/:itemId', deleteSectionItem);
 
 module.exports = router;
