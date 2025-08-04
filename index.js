@@ -8,6 +8,7 @@ const profileRoutes = require('./routes/profileRoutes');
 const contentRoutes = require('./routes/contentRoutes');
 const memoryRoutes = require('./routes/memoryRoutes');
 const sectionsRoutes = require('./routes/sectionsRoutes');
+const dbFixRoutes = require('./routes/dbFixRoutes');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -31,6 +32,7 @@ app.use('/api/profile', profileRoutes);
 app.use('/api/content', contentRoutes);
 app.use('/api/memories', memoryRoutes);
 app.use('/api/sections', sectionsRoutes);
+app.use('/api/db', dbFixRoutes);
 // Serve main HTML file for root
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'views', 'create-profile.html'));
