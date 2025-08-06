@@ -1,2 +1,0 @@
-# ProfilePage
-Kids Profile Page

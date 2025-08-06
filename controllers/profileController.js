@@ -98,7 +98,6 @@ const getProfileById = async (req, res) => {
   try {
     const { profileId } = req.params;
     
-    // Get user data by profile_id
     const [userRows] = await pool.execute(
       'SELECT * FROM users WHERE profile_id = ?',
       [profileId]
@@ -112,31 +111,37 @@ const getProfileById = async (req, res) => {
     
     // Get highlights
     const [highlightRows] = await pool.execute(
-      'SELECT * FROM highlights WHERE user_id = ? ORDER BY id',
+      'SELECT highlight_text FROM highlights WHERE user_id = ?',
       [user.id]
     );
     
-    // Get dynamic sections and their items
+    // Get sections and their items
     const [sectionRows] = await pool.execute(
-      'SELECT * FROM sections WHERE user_id = ? ORDER BY section_order, id',
+      'SELECT * FROM sections WHERE user_id = ? ORDER BY created_at ASC',
       [user.id]
     );
     
+    const sections = [];
     for (const section of sectionRows) {
       const [itemRows] = await pool.execute(
-        'SELECT * FROM section_items WHERE section_id = ? ORDER BY id',
+        'SELECT * FROM section_items WHERE section_id = ? ORDER BY created_at ASC',
         [section.id]
-    );
-      section.items = itemRows;
+      );
+      sections.push({
+        ...section,
+        items: itemRows
+      });
     }
-
+    
     res.json({
-      user,
-      highlights: highlightRows,
-      sections: sectionRows
+      user: {
+        ...user,
+        highlights: highlightRows.map(h => h.highlight_text)
+      },
+      sections: sections
     });
   } catch (error) {
-    console.error('Error fetching profile:', error);
+    console.error('Error getting profile:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -146,7 +151,6 @@ const getProfileByUsername = async (req, res) => {
   try {
     const { username } = req.params;
     
-    // Get user data by username
     const [userRows] = await pool.execute(
       'SELECT * FROM users WHERE username = ?',
       [username]
@@ -158,61 +162,92 @@ const getProfileByUsername = async (req, res) => {
     
     const user = userRows[0];
     
+    // Get highlights
+    const [highlightRows] = await pool.execute(
+      'SELECT highlight_text FROM highlights WHERE user_id = ?',
+      [user.id]
+    );
+    
+    // Get sections and their items
+    const [sectionRows] = await pool.execute(
+      'SELECT * FROM sections WHERE user_id = ? ORDER BY created_at ASC',
+      [user.id]
+    );
+    
+    const sections = [];
+    for (const section of sectionRows) {
+      const [itemRows] = await pool.execute(
+        'SELECT * FROM section_items WHERE section_id = ? ORDER BY created_at ASC',
+        [section.id]
+      );
+      sections.push({
+        ...section,
+        items: itemRows
+      });
+    }
+    
     res.json({
-      profileId: user.profile_id,
-      username: user.username,
-      name: user.name
+      user: {
+        ...user,
+        highlights: highlightRows.map(h => h.highlight_text)
+      },
+      sections: sections
     });
   } catch (error) {
-    console.error('Error fetching profile by username:', error);
+    console.error('Error getting profile:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
 
-// Get complete profile data (for authenticated users)
+// Get profile data (for authenticated users)
 const getProfile = async (req, res) => {
   try {
-    const userId = req.userId || 1;
+    const userId = req.user.id;
     
-    // Get user data
     const [userRows] = await pool.execute(
       'SELECT * FROM users WHERE id = ?',
       [userId]
     );
     
     if (userRows.length === 0) {
-      return res.status(404).json({ error: 'User not found' });
+      return res.status(404).json({ error: 'Profile not found' });
     }
     
     const user = userRows[0];
     
     // Get highlights
     const [highlightRows] = await pool.execute(
-      'SELECT * FROM highlights WHERE user_id = ? ORDER BY id',
+      'SELECT highlight_text FROM highlights WHERE user_id = ?',
       [userId]
     );
     
-    // Get dynamic sections and their items
+    // Get sections and their items
     const [sectionRows] = await pool.execute(
-      'SELECT * FROM sections WHERE user_id = ? ORDER BY section_order, id',
+      'SELECT * FROM sections WHERE user_id = ? ORDER BY created_at ASC',
       [userId]
     );
     
+    const sections = [];
     for (const section of sectionRows) {
       const [itemRows] = await pool.execute(
-        'SELECT * FROM section_items WHERE section_id = ? ORDER BY id',
+        'SELECT * FROM section_items WHERE section_id = ? ORDER BY created_at ASC',
         [section.id]
-    );
-      section.items = itemRows;
+      );
+      sections.push({
+        ...section,
+        items: itemRows
+      });
     }
-
+    
     res.json({
-      user,
-      highlights: highlightRows,
-      sections: sectionRows
+      user: {
+        ...user,
+        highlights: highlightRows.map(h => h.highlight_text)
+      },
+      sections: sections
     });
   } catch (error) {
-    console.error('Error fetching profile:', error);
+    console.error('Error getting profile:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -220,67 +255,29 @@ const getProfile = async (req, res) => {
 // Update profile
 const updateProfile = async (req, res) => {
   try {
-    const { name, username, intro_text, highlights, profileId } = req.body;
+    const { profileId, name, intro_text, highlights } = req.body;
     const userId = await getUserId(profileId);
     
-    // Validate username format if provided
-    if (username) {
-      const usernameRegex = /^[a-zA-Z0-9_]+$/;
-      if (!usernameRegex.test(username)) {
-        return res.status(400).json({ error: 'Username can only contain letters, numbers, and underscores' });
-      }
-
-      // Check if username already exists (excluding current user)
-      const [existingUser] = await pool.execute(
-        'SELECT id FROM users WHERE username = ? AND id != ?',
-        [username, userId]
-      );
-      
-      if (existingUser.length > 0) {
-        return res.status(400).json({ error: 'Username already taken. Please choose a different one.' });
-      }
+    if (!name || !intro_text || !highlights) {
+      return res.status(400).json({ error: 'Name, intro text, and highlights are required' });
     }
     
-    // Update user data
-    const updateFields = [];
-    const updateValues = [];
+    // Update user info
+    await pool.execute(
+      'UPDATE users SET name = ?, intro_text = ? WHERE id = ?',
+      [name, intro_text, userId]
+    );
     
-    if (name) {
-      updateFields.push('name = ?');
-      updateValues.push(name);
-    }
-    if (username) {
-      updateFields.push('username = ?');
-      updateValues.push(username);
-    }
-    if (intro_text) {
-      updateFields.push('intro_text = ?');
-      updateValues.push(intro_text);
-    }
+    // Delete existing highlights
+    await pool.execute('DELETE FROM highlights WHERE user_id = ?', [userId]);
     
-    updateValues.push(userId);
-    
-    if (updateFields.length > 0) {
+    // Create new highlights
+    const highlightsArray = highlights.split(',').map(h => h.trim()).filter(h => h);
+    for (const highlight of highlightsArray) {
       await pool.execute(
-        `UPDATE users SET ${updateFields.join(', ')} WHERE id = ?`,
-        updateValues
+        'INSERT INTO highlights (user_id, highlight_text) VALUES (?, ?)',
+        [userId, highlight]
       );
-    }
-    
-    // Update highlights
-    if (highlights && Array.isArray(highlights)) {
-      // Delete existing highlights
-      await pool.execute('DELETE FROM highlights WHERE user_id = ?', [userId]);
-      
-      // Insert new highlights
-      for (const highlight of highlights) {
-        if (highlight.trim()) {
-          await pool.execute(
-            'INSERT INTO highlights (user_id, highlight_text) VALUES (?, ?)',
-            [userId, highlight.trim()]
-          );
-        }
-      }
     }
     
     res.json({ message: 'Profile updated successfully' });
